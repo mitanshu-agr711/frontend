@@ -92,6 +92,27 @@ const mockOfficialUpdates = [
   },
 ]
 
+interface DisasterData {
+  id: string;
+  title: string;
+  description: string;
+  tags: string[];
+  location_name: string;
+  latitude: number;
+  longitude: number;
+  created_at: string;
+  updated_at: string;
+}
+
+interface CreateDisasterData {
+  title: string;
+  description: string;
+  tags: string[];
+  location_name: string;
+  latitude: number;
+  longitude: number;
+}
+
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 apiClient.interceptors.request.use(
@@ -164,23 +185,22 @@ apiClient.interceptors.response.use(
       return { data: updatedDisaster }
     }
 
-    if (url.includes("/verify-image/") && method === "POST") {
-      return { data: { success: true, message: "Report submitted successfully" } }
-    }
+      if (url.includes("/verify-image/") && method === "POST") {
+        return { data: { isValid: true, message: "Image verified successfully" } }
+      }
+  
+      return Promise.reject(error)
+    },
+  )
+  
+  export const createApiRequest = {
+    // Get all disasters
+    getDisasters: () => apiClient.get("/getDisasters"),
 
-    // For unknown endpoints, return the original error
-    return Promise.reject(error)
-  },
-)
-
-export const createApiRequest = {
-  // Get all disasters
-  getDisasters: () => apiClient.get("/getDisasters"),
-
-  // Get single disaster by filtering from all disasters
+  // Get single disaster by ID
   getDisaster: async (id: string) => {
     const response = await apiClient.get("/getDisasters")
-    const disaster = response.data.find((d: any) => d.id === id)
+    const disaster = response.data.find((d: DisasterData) => d.id === id)
     if (!disaster) {
       throw new Error("Disaster not found")
     }
@@ -188,7 +208,7 @@ export const createApiRequest = {
   },
 
   // Create disaster (requires contributor role - reliefAdmin)
-  createDisaster: (data: any) =>
+  createDisaster: (data: CreateDisasterData) =>
     apiClient.post("/createDisaster", data, {
       headers: { "x-user": "reliefAdmin" },
     }),

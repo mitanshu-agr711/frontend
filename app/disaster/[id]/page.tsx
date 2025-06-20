@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,7 +27,15 @@ interface Disaster {
   created_at: string
   updated_at: string
   owner_id?: string
-  audit_trail?: any[]
+  audit_trail?: AuditTrailEntry[]
+}
+
+interface AuditTrailEntry {
+  id: string
+  action: string
+  timestamp: string
+  user_id?: string
+  changes?: Record<string, unknown>
 }
 
 interface SocialMediaPost {
@@ -83,46 +91,9 @@ export default function DisasterDetailPage() {
     imageUrl: "",
   })
 
-  const { socket, isConnected, connectionError } = useSocket()
+  const { socket, isConnected } = useSocket()
 
-  useEffect(() => {
-    if (disasterId) {
-      fetchDisasterDetails()
-      fetchSocialMedia()
-      fetchResources()
-      fetchOfficialUpdates()
-    }
-  }, [disasterId])
-
-  useEffect(() => {
-    if (socket && isConnected && disasterId) {
-      socket.on("disaster_updated", (data) => {
-        if (data.id === disasterId) {
-          fetchDisasterDetails()
-        }
-      })
-
-      socket.on("social_media_updated", (data) => {
-        if (data.disasterId === disasterId) {
-          fetchSocialMedia()
-        }
-      })
-
-      socket.on("resources_updated", (data) => {
-        if (data.disasterId === disasterId) {
-          fetchResources()
-        }
-      })
-
-      return () => {
-        socket.off("disaster_updated")
-        socket.off("social_media_updated")
-        socket.off("resources_updated")
-      }
-    }
-  }, [socket, isConnected, disasterId])
-
-  const fetchDisasterDetails = async () => {
+  const fetchDisasterDetails = useCallback(async () => {
     try {
       const response = await createApiRequest.getDisaster(disasterId)
       setDisaster(response.data)
@@ -135,9 +106,9 @@ export default function DisasterDetailPage() {
     } catch (error) {
       console.error("Error fetching disaster details:", error)
     }
-  }
+  }, [disasterId])
 
-  const fetchSocialMedia = async () => {
+  const fetchSocialMedia = useCallback(async () => {
     try {
       const response = await createApiRequest.getSocialMedia(disasterId)
       setSocialPosts(response.data)
@@ -145,9 +116,9 @@ export default function DisasterDetailPage() {
       console.error("Error fetching social media:", error)
       setSocialPosts([]) // Set empty array on error
     }
-  }
+  }, [disasterId])
 
-  const fetchResources = async () => {
+  const fetchResources = useCallback(async () => {
     try {
       // Use disaster coordinates if available, otherwise use default coordinates
       const lat = disaster?.latitude || 40.7128
@@ -158,25 +129,51 @@ export default function DisasterDetailPage() {
       console.error("Error fetching resources:", error)
       setResources([]) // Set empty array on error
     }
-  }
+  }, [disasterId, disaster?.latitude, disaster?.longitude])
 
-  const fetchOfficialUpdates = async () => {
+  const fetchOfficialUpdates = useCallback(async () => {
+    setLoading(true); // Optional: set loading true before fetching
     try {
       const [response1, response2] = await Promise.all([
         createApiRequest.getOfficialUpdates(disasterId).catch(() => ({ data: [] })),
         createApiRequest.getOfficialUpdatesNoCache(disasterId).catch(() => ({ data: [] })),
-      ])
-      // Combine both responses, removing duplicates
-      const combined = [...response1.data, ...response2.data]
-      const unique = combined.filter((item, index, self) => index === self.findIndex((t) => t.id === item.id))
-      setOfficialUpdates(unique)
+      ]);
+      // Combine both responses, removing duplicates by 'id'
+      const combined = [...response1.data, ...response2.data];
+      const unique = combined.filter(
+        (item, index, self) => index === self.findIndex((t) => t.id === item.id)
+      );
+      setOfficialUpdates(unique);
     } catch (error) {
-      console.error("Error fetching official updates:", error)
-      setOfficialUpdates([]) // Set empty array on error
+      console.error("Error fetching official updates:", error);
+      setOfficialUpdates([]); // Set empty array on error
     } finally {
-      setLoading(false)
+      setLoading(false);
+    }
+  }, [disasterId, setOfficialUpdates, setLoading]);
+
+  useEffect(() => {
+    if (disasterId) {
+      fetchDisasterDetails()
+      fetchSocialMedia()
+      fetchResources()
+      fetchOfficialUpdates()
+    }
+  }, [disasterId, fetchDisasterDetails, fetchSocialMedia, fetchResources, fetchOfficialUpdates])
+
+useEffect(() => {
+  if (socket && isConnected && disasterId) {
+    socket.on("disaster_updated", (data) => {
+      if (data.id === disasterId) {
+        fetchDisasterDetails()
+      }
+    })
+
+    return () => {
+      socket.off("disaster_updated")
     }
   }
+}, [socket, isConnected, disasterId, fetchDisasterDetails])
 
   const handleUpdateDisaster = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -84,7 +84,9 @@ export default function HomePage() {
           .split(",")
           .map((tag) => tag.trim())
           .filter(Boolean),
-        ...(formData.locationName ? { locationName: formData.locationName } : {}),
+        location_name: formData.locationName || "",
+        latitude: 0,
+        longitude: 0,
         ...(formData.locationDescription ? { locationDescription: formData.locationDescription } : {}),
       }
 
